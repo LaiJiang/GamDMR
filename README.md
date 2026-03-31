@@ -11,26 +11,26 @@ Only core scripts required to reproduce the main results are included. SLSJ coho
 ## 1. Data Preparation (1_process)
 - `1_process/`  
 
-  1_pheno.ipynb:    Prepare phenotype and covariates from SLSJ cohort data.
-  2_var.py:    Example script to collect sample CpGs for preliminary data exploration and analysis.
+  - `1_pheno.ipynb`:    Prepare phenotype and covariates from SLSJ cohort data.
+  - `2_var.py`:    Example script to collect sample CpGs for preliminary data exploration and analysis.
 
 ---
 
 
 ## 2. Whole-Genome Analysis with Univaraite Models (2_univariate)
 - `2_univariate/`  
-  0_func_single.R: the main function for single-CpG association analysis.
-  1_job.R: the script to run the analysis in parallel on HPC clusters.
-  1_job.sh: the batch script to submit jobs on HPC clusters.
+  - `0_func_single.R`: the main function for single-CpG association analysis.
+  - `1_job.R`: the script to run the analysis in parallel on HPC clusters.
+  - `1_job.sh`: the batch script to submit jobs on HPC clusters.
 
 ---
 
 ## 3. Somnibus (DMR) Analysis
 - `3_somnibus/`  
   Regional association analysis with somnibus. 
-  0_func_region.R: the main function for regional association analysis with Somnibus.
-  0_func_somnibus_input.R: the function to prepare input for somnibus.
-  1_test_chunk.R: the script to run the Somnibus analysis on a single region in parallel on HPC clusters.
+  - `0_func_region.R`: the main function for regional association analysis with Somnibus.
+  - `0_func_somnibus_input.R`: the function to prepare input for somnibus.
+  - `1_test_chunk.R`: the script to run the Somnibus analysis on a single region in parallel on HPC clusters.
 
 ---
 
@@ -39,10 +39,10 @@ Only core scripts required to reproduce the main results are included. SLSJ coho
 - `4_mgcv/`  
   Regional association analysis with GAM-DMR method as in our manuscript.
 
- 0_split_spacing_clean.R — Utinity function to define CpG Regions
- 0_load_results_updated.R - Utinity function to standardize and load model outputs from batch jobs.
- 1_run_region_clean.R - Run the core GAM-DMR model for a single region.
- 1_run_region_batch_clean.sh - Batch script to run GAM-DMR across multiple regions in parallel on HPC clusters.
+  - `0_split_spacing_clean.R`: Utility function to define CpG Regions
+  - `0_load_results_updated.R`: Utility function to standardize and load model outputs from batch jobs.
+  - `1_run_region_clean.R`: Run the core GAM-DMR model for a single region.
+  - `1_run_region_batch_clean.sh`: Batch script to run GAM-DMR across multiple regions in parallel on HPC clusters.
 
 ---
 
