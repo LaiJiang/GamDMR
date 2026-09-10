@@ -1,0 +1,737 @@
+Core principle
+
+The comparison should evaluate the entire DMR-selection-to-prediction pipeline:
+
+outer training families→DMR discovery→feature construction→model tuning→prediction of untouched test families
+
+For every outer split, each method must use only the DMRs selected from that split’s 80% training families. The corresponding 20% test families must not influence DMR selection, feature construction, imputation, PCA, tuning, or threshold choice.
+
+The four methods should use the same 100 family splits and the same test subjects, making every comparison paired.
+
+1. Outer cross-validation structure
+
+You already have 100 family-level 80/20 splits. Preserve them exactly.
+
+For split s:
+
+Obtain train_FID from 100_family_training_splits.csv.
+Define test_FID as all remaining families.
+Load the split-specific DMR set for each method.
+Construct methylation features using the training set.
+Fit one prediction model for each method.
+Predict AA in the same split-specific test set.
+
+This gives:
+
+100 splits×4 DMR methods=400
+
+primary prediction models.
+
+The combined all-split DMR files should not be used to define a consensus feature list for this evaluation. They are useful for bookkeeping and stability analysis, but using DMR selection frequencies across all 100 splits would indirectly allow information from a split’s test subjects to influence that split’s feature set.
+
+2. Which regions should be used
+
+For each split, use the actual regions identified by the method.
+
+GAM-DMR
+
+Use the strict split-specific GAM-DMR regions, with the selected parent-region coordinates:
+
+chr
+region_start
+region_end
+region_id
+SOMNiBUS
+
+Use the split-specific SOMNiBUS child-region coordinates:
+
+chr
+region_start
+region_end
+omnibus_region_id
+BSmooth
+
+Use the detailed BSmooth DMR coordinates, not merely the parent candidate-region summary:
+
+6_BSmooth_DMR_details_split_XXX.tsv
+
+The summary file indicates that a parent candidate produced at least one DMR, but the detailed file contains the actual dmrFinder() interval.
+
+DMRcate
+
+Likewise, use the detailed extracted DMR coordinates:
+
+7_DMRcate_DMR_details_split_XXX.tsv
+
+rather than the full candidate parent region.
+
+Within each method and split:
+
+remove exact duplicate coordinates;
+retain native overlapping DMRs in the primary analysis;
+optionally merge overlapping regions in a sensitivity analysis.
+
+Keeping native regions measures the predictive utility of the method as it actually operates. Merging overlaps can show whether duplicated genomic coverage is influencing performance.
+
+3. Feature construction
+Recommended primary feature representation
+
+Use PC1 and PC2 from each DMR, followed by LASSO.
+
+This maintains continuity with your pilot comparison, where the selected comparison model was:
+
+allDMR_PC12_LASSO
+
+PC1 and PC2 are also more appropriate than a regional mean when a DMR contains positional changes that could cancel out when averaged.
+
+Critical correction to the pilot code
+
+Your pilot creates DMR PCs before separating training and test samples. It imputes each CpG using all subjects and runs prcomp() on the complete sample matrix.
+
+That introduces test-set information into the PCA representation.
+
+For every DMR and split, instead:
+
+Extract the DMR CpGs for training and test subjects.
+Apply the arcsine-square-root transformation.
+Estimate each CpG’s missing-value median from training subjects only.
+Apply those training medians to both training and test subjects.
+Remove CpGs with zero training variance.
+Estimate PCA center, scale, and rotation from training subjects only.
+Generate training PC scores.
+Project test subjects using the training PCA rotation.
+
+Conceptually:
+
+pca_train <- prcomp(
+  training_matrix,
+  center = TRUE,
+  scale. = TRUE
+)
+
+PC_train <- pca_train$x[, 1:2]
+
+PC_test <- predict(
+  pca_train,
+  newdata = test_matrix
+)[, 1:2]
+
+Never rerun prcomp() separately on the test set.
+
+Secondary feature representation
+
+Use one regional mean feature per DMR:
+
+X
+ir
+	​
+
+=
+K
+r
+	​
+
+1
+	​
+
+k∈r
+∑
+	​
+
+asin
+β
+ik
+	​
+
+	​
+
+
+This provides a simpler and more interpretable sensitivity analysis.
+
+Recommended analyses:
+
+Primary:   DMR PC1 + PC2
+Secondary: DMR mean
+Common CpG-quality rules
+
+Apply the same rules to all four methods:
+
+CpG filtering based on training subjects only;
+missing-value imputation based on training subjects only;
+zero-variance filtering based on training subjects only;
+the exact same retained CpGs and transformation parameters applied to test subjects.
+
+If a DMR has:
+
+at least two usable variable CpGs: calculate PC1 and PC2;
+only one usable CpG: optionally retain that CpG as one feature;
+no usable CpGs: remove the DMR.
+
+Record these decisions for QC.
+
+4. Prediction model
+Primary model
+
+Use logistic LASSO:
+
+family = "binomial"
+alpha = 1
+lambda = "lambda.1se"
+
+The primary model would therefore be:
+
+DMR PC1/PC2 + age + sex + smoking + BMI
+
+Your pilot already used these four covariates.
+
+I recommend keeping clinical covariates unpenalized:
+
+penalty.factor = c(
+  rep(1, n_methylation_features),
+  rep(0, n_covariates)
+)
+
+This means:
+
+DMR methylation features are LASSO-selected;
+age, sex, smoking, and BMI remain in every model;
+differences across methods reflect the methylation feature sets rather than arbitrary removal of baseline covariates.
+Inner cross-validation
+
+Your pilot uses:
+
+cv.glmnet(
+  ...,
+  nfolds = 10,
+  type.measure = "auc"
+)
+
+without supplying family-grouped foldid.
+
+Therefore, related individuals could appear in different inner folds.
+
+For the new analysis, use five inner folds defined at the family level:
+
+cv.glmnet(
+  x = x_train,
+  y = y_train,
+  family = "binomial",
+  alpha = 1,
+  foldid = family_fold_id,
+  type.measure = "auc",
+  standardize = TRUE
+)
+
+All members of the same FID must share the same inner fold.
+
+Use the same inner-fold assignment for all four DMR methods within a given outer split.
+
+Recommended tuning
+
+Primary:
+
+alpha = 1
+lambda = lambda.1se
+
+Sensitivity:
+
+alpha = 1
+lambda = lambda.min
+
+and optionally:
+
+alpha = 0.5
+lambda = lambda.1se
+
+The primary comparison should remain one pre-specified algorithm. Do not select between LASSO and elastic net based on outer test performance.
+
+No-DMR splits
+
+A method may select no usable DMRs in a split.
+
+Do not discard that split. Fit the covariate-only model:
+
+age + sex + smoking + BMI
+
+and record:
+
+n_DMR_input = 0
+model_fallback = "covariate_only"
+
+This legitimately reflects that the DMR method found no predictive methylation information in that training sample.
+
+Technical failures should be rerun rather than treated as no-DMR results.
+
+5. Baseline models
+
+Every split should include at least two reference models.
+
+Covariate-only baseline
+age + sex + smoking + BMI
+
+This answers:
+
+Does the method’s methylation feature set improve prediction beyond basic clinical variables?
+
+Calculate:
+
+ΔAUC
+m,s
+	​
+
+=AUC
+m,s
+	​
+
+−AUC
+covariates,s
+	​
+
+Intercept-only baseline
+
+Useful mainly for Brier score, log loss, and PR-AUC interpretation.
+
+The baseline PR-AUC for split s is approximately the AA prevalence in its test set:
+
+PRbaseline
+s
+	​
+
+=
+N
+test,s
+	​
+
+N
+AA,test,s
+	​
+
+	​
+
+
+Report both raw PR-AUC and:
+
+PRlift
+m,s
+	​
+
+=PRAUC
+m,s
+	​
+
+−PRbaseline
+s
+	​
+
+
+A single-CpG benchmark should eventually be added because the reviewer explicitly requested comparison with both established DMR methods and single-CpG approaches.
+
+6. Test-set performance criteria
+
+Only test-set metrics should be used to rank methods. Training metrics are useful for diagnosing overfitting but should not support superiority claims.
+
+Primary outcome
+Test AUROC
+
+For each method and split:
+
+AUROC
+m,s
+	​
+
+
+AUROC measures ranking discrimination and is relatively insensitive to the test-set prevalence.
+
+Key secondary outcome
+Test PR-AUC
+PRAUC
+m,s
+	​
+
+
+PR-AUC is especially useful when the classes are imbalanced and focuses on correctly identifying AA cases.
+
+Probability accuracy
+
+Report:
+
+Brier score
+Brier
+m,s
+	​
+
+=
+N
+s
+	​
+
+1
+	​
+
+i
+∑
+	​
+
+(
+p
+^
+	​
+
+is
+	​
+
+−y
+i
+	​
+
+)
+2
+
+Lower is better.
+
+Log loss
+−
+N
+s
+	​
+
+1
+	​
+
+i
+∑
+	​
+
+[y
+i
+	​
+
+log(
+p
+^
+	​
+
+i
+	​
+
+)+(1−y
+i
+	​
+
+)log(1−
+p
+^
+	​
+
+i
+	​
+
+)]
+
+Lower is better.
+
+Calibration
+
+Report:
+
+calibration intercept;
+calibration slope;
+observed-versus-predicted calibration plot.
+
+Ideal values are:
+
+intercept = 0
+slope     = 1
+
+Calibration estimates may be unstable within individual 20% test sets, so the pooled out-of-fold analysis described below will be particularly useful for calibration.
+
+Threshold-dependent criteria
+
+Report:
+
+sensitivity;
+specificity;
+balanced accuracy;
+positive predictive value;
+negative predictive value.
+
+The classification threshold must be selected from training data only.
+
+A rigorous approach is:
+
+generate family-grouped inner-CV predictions for the outer training set;
+choose the threshold maximizing Youden’s index from those inner-CV predictions;
+refit the final model on all outer training subjects;
+apply the previously chosen threshold to the outer test predictions.
+
+Do not choose the threshold from the test ROC curve.
+
+7. Per-split result table
+
+Create one row per:
+
+splitID × DMR method × model variant
+
+Recommended columns:
+
+splitID
+DMR_method
+feature_type
+model_type
+n_train
+n_test
+n_train_FIDs
+n_test_FIDs
+n_test_cases
+n_test_controls
+n_DMR_input
+n_CpGs_input
+n_features_input
+n_features_nonzero
+lambda
+threshold
+AUROC
+PR_AUC
+PR_baseline
+PR_AUC_lift
+Brier
+log_loss
+calibration_intercept
+calibration_slope
+sensitivity
+specificity
+balanced_accuracy
+PPV
+NPV
+fit_status
+
+Also save individual predictions:
+
+splitID
+DMR_method
+IID
+FID
+AA_only
+pred_prob
+pred_score
+threshold
+predicted_class
+
+And selected coefficients:
+
+splitID
+DMR_method
+feature
+coefficient
+DMR_coordinate
+8. Comparing methods statistically
+
+Because the same outer split is used for all methods, comparisons should be paired.
+
+For example, comparing GAM-DMR with SOMNiBUS:
+
+d
+s
+	​
+
+=AUROC
+GAM,s
+	​
+
+−AUROC
+SOMNiBUS,s
+	​
+
+
+Report:
+
+mean paired difference
+median paired difference
+95% confidence interval
+percentage of splits where GAM-DMR wins
+percentage where the difference exceeds a practical margin
+Important dependence issue
+
+The 100 repeated 80/20 splits overlap substantially. Therefore, the 100 AUROC values are not independent observations.
+
+A simple ordinary paired t-test would produce confidence intervals that are too narrow.
+
+A suitable approximate analysis is the corrected repeated-CV test:
+
+SE
+corrected
+	​
+
+=
+(
+R
+1
+	​
+
++
+n
+train
+	​
+
+n
+test
+	​
+
+	​
+
+)s
+d
+2
+	​
+
+	​
+
+
+where:
+
+R = 100
+n_test / n_train ≈ 0.20 / 0.80 = 0.25
+s_d² = variance of paired performance differences
+
+Then:
+
+t=
+SE
+corrected
+	​
+
+d
+ˉ
+	​
+
+
+Use three pre-specified GAM-DMR comparisons:
+
+GAM-DMR versus SOMNiBUS
+GAM-DMR versus BSmooth
+GAM-DMR versus DMRcate
+
+Apply Holm correction to these three p-values.
+
+For each comparison, emphasize the effect estimate and confidence interval rather than only the p-value.
+
+Secondary family-cluster bootstrap
+
+Each individual will appear in multiple test sets. For a secondary overall visualization:
+
+average each individual’s test prediction across all splits in which that person was held out;
+compute one subject-level prediction per method;
+bootstrap entire FIDs rather than individual subjects;
+calculate paired confidence intervals for AUROC, PR-AUC, Brier score, and their differences.
+
+These averaged predictions represent an ensemble of repeated models, so they should be labelled as a secondary aggregate analysis—not as the performance of a single fitted model.
+
+9. Fairness with different numbers of DMRs
+
+The methods may select very different numbers of DMRs.
+
+Your primary analysis should use all DMRs selected by each method, because this evaluates end-to-end predictive utility.
+
+However, also run a matched-feature-budget sensitivity analysis.
+
+For each split, use the top:
+
+K = 25
+K = 50
+K = 100
+
+regions from each method, where available.
+
+Ranking must use training-derived method statistics only:
+
+GAM-DMR:  smooth-interaction p-value/FDR, then effect size
+SOMNiBUS: adjusted or raw regional AA p-value
+BSmooth:  absolute areaStat or maxStat
+DMRcate:  minfdr or score
+
+This answers two different questions:
+
+All DMRs:
+Which complete DMR-selection pipeline predicts best?
+
+Matched K:
+Which method ranks its strongest DMRs most effectively?
+
+Also plot test performance against:
+
+number of input DMRs
+number of input CpGs
+number of nonzero LASSO features
+
+This will reveal whether apparent superiority is driven mainly by identifying more regions.
+
+10. Recommended primary analysis specification
+
+I would pre-specify the primary analysis as:
+
+Outer validation:
+100 repeated family-level 80/20 splits
+
+DMR features:
+PC1 and PC2 per split-specific DMR
+
+PCA:
+fit on outer training subjects only
+projected to outer test subjects
+
+Prediction model:
+logistic LASSO, alpha = 1
+
+Lambda:
+family-grouped fivefold inner CV
+lambda.1se
+
+Covariates:
+age, sex, smoking, BMI
+included without penalization
+
+Primary metric:
+test AUROC
+
+Key secondary metrics:
+test PR-AUC, Brier score, calibration
+
+Method comparison:
+paired split-specific differences
+corrected repeated-CV confidence intervals
+Holm correction for three GAM-DMR comparisons
+
+Primary model count:
+
+100 splits × 4 methods = 400 models
+
+Sensitivity analyses:
+
+DMR mean instead of PC1/PC2
+lambda.min instead of lambda.1se
+elastic net alpha = 0.5
+matched top-K DMRs
+merged overlapping DMR intervals
+methylation-only versus methylation + covariates
+11. Suggested figures
+
+The most informative final figures would be:
+
+Paired AUROC distributions across 100 splits, with lines joining methods within each split.
+Paired PR-AUC distributions.
+Forest plot of mean paired differences versus GAM-DMR with 95% corrected intervals.
+Aggregated out-of-fold ROC and PR curves using subject-averaged predictions.
+Calibration curves.
+AUROC versus number of selected DMRs.
+DMR and nonzero-feature stability across splits.
+Main changes needed relative to the pilot
+
+Your pilot is an appropriate proof of concept, but the full CV pipeline must correct three issues:
+
+The pilot uses DMRs selected from the complete dataset, whereas the new evaluation must use split-specific training-selected DMRs.
+The pilot estimates PCA and some missing-value replacements using all subjects before prediction.
+The pilot’s inner cv.glmnet() does not supply family-grouped folds.
+
+Once those are corrected, the outer test results will provide a defensible comparison of the predictive utility and generalizability of GAM-DMR, SOMNiBUS, BSmooth, and DMRcate.
+
+Confidence: 0.98
