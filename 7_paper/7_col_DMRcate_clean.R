@@ -1,26 +1,30 @@
+
 suppressPackageStartupMessages({
   library(data.table)
-  library(dplyr)
 })
 
 base_dir <- Sys.getenv("METH_BASE_DIR", unset = getwd())
 paper_dir <- file.path(base_dir, "14_paper")
 input_dir <- file.path(base_dir, "results", "13_dmrcate")
 output_file <- file.path(paper_dir, "results", "7_DMRcate_DMRs.csv")
-
 dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
 
-summary_files <- list.files(
-  path = input_dir,
-  pattern = "^summary_job_.*\\.tsv$",
-  full.names = TRUE
-)
+files <- list.files(input_dir, pattern = "^dmrcate_job_.*\\.tsv$", full.names = TRUE)
+if (length(files) == 0L) stop("No DMRcate DMR files found in: ", input_dir)
 
-if (length(summary_files) == 0) {
-  stop("No DMRcate summary files found in: ", input_dir)
+x <- rbindlist(lapply(files, fread), use.names = TRUE, fill = TRUE)
+if (!all(c("region_start", "region_end") %in% names(x))) {
+  if (all(c("start", "end") %in% names(x))) {
+    x[, `:=`(region_start = as.integer(start), region_end = as.integer(end))]
+  } else {
+    stop("DMRcate DMR coordinates are missing.")
+  }
 }
+if (!"chr" %in% names(x)) {
+  if ("seqnames" %in% names(x)) x[, chr := as.character(seqnames)] else stop("DMRcate chromosome is missing.")
+}
+x[, chr := as.character(chr)]
+x[, width := as.integer(region_end) - as.integer(region_start) + 1L]
+x[, call_id := .I]
 
-merged_df <- rbindlist(lapply(summary_files, fread), use.names = TRUE, fill = TRUE)
-dmrcate_dmrs <- merged_df %>% filter(n_dmrs >= 1)
-
-fwrite(dmrcate_dmrs, file = output_file)
+fwrite(x, output_file)

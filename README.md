@@ -141,4 +141,4 @@ This folder tests whether read-depth weighting changes the main GAM-DMR conclusi
 - SLSJ cohort data, raw methylation matrices, and temporary pipeline outputs are not included in the repository for privacy and size reasons; users need to use their own data, or obtain data permission from Catherine Lab and SLSJ cohort authorities. 
 - The scripts are intentionally modular so they can be adapted to similar methylation datasets and cluster environments.
 - The repository combines discovery, sensitivity, benchmarking, and reporting steps into one reproducible analysis framework.
-- For questions about specific scripts or run order, please contact the repository maintainer Lai Jiang or leave comments.
+- For questions about specific scripts or run order, please contact the repository maintainer Lai Jiang or leave comments..
