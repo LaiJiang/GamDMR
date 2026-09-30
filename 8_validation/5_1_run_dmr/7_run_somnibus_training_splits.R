@@ -130,7 +130,7 @@ for (region_name in names(bundle$regions)) {
         method = "REML",
         covs = covs,
         RanEff = TRUE,
-        reml.scale = -2,
+        reml.scale = FALSE,
         scale = -2,
         verbose = FALSE
       ),
