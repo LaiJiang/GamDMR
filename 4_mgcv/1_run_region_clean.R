@@ -1,4 +1,3 @@
-
 suppressPackageStartupMessages({
   library(data.table)
   library(dplyr)
@@ -13,19 +12,19 @@ if (is.na(job_id)) stop("job_id must be an integer.")
 
 min_cpgs <- 10L
 n_jobs <- 300L
-base_dir <- Sys.getenv("METH_BASE_DIR", unset = getwd())
-data_dir <- file.path(base_dir, "data", "meth_split")
-script_dir <- file.path(base_dir, "4_mgcv")
-output_dir <- file.path(base_dir, "results", "4_mgcv", "B1")
+PATH_wk <- path.expand(Sys.getenv("METH_BASE_DIR", "~/scratch/UQAC/meth"))
+PATH_scr11 <- file.path(PATH_wk, "scr", "11_mgcv")
+data_dir <- file.path(PATH_wk, "data", "meth_split")
+output_dir <- file.path(PATH_wk, "results", "4_mgcv", "B1")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-region_file_path <- file.path(script_dir, "dat", "region_file_1_chunk.csv")
-pheno_file_path <- file.path(script_dir, "dat", "18_pheno_BMI.RData")
+region_file_path <- file.path(PATH_scr11, "dat", "region_file_1_chunk.csv")
+pheno_file_path <- file.path(PATH_scr11, "dat", "18_pheno_BMI.RData")
 if (!file.exists(region_file_path)) stop("Missing region file: ", region_file_path)
 if (!file.exists(pheno_file_path)) stop("Missing phenotype file: ", pheno_file_path)
 
 region_file <- fread(region_file_path)
-if (!"region_id" %in% names(region_file)) region_file[, region_id := .I]
+region_file[, region_id := .I]
 region_index_list <- split(
   seq_len(nrow(region_file)),
   cut(seq_len(nrow(region_file)), breaks = n_jobs, labels = FALSE)
@@ -87,7 +86,9 @@ for (i_region in region_ids) {
   }
 
   dat$FID <- droplevels(factor(dat$FID))
+  if (is.factor(dat$AA_only)) dat$AA_only <- as.character(dat$AA_only)
   dat$AA_only <- as.numeric(dat$AA_only)
+
   n_cpgs <- data.table::uniqueN(dat$start)
   if (n_cpgs < min_cpgs || length(unique(dat$AA_only)) < 2L || nlevels(dat$FID) < 2L) next
 

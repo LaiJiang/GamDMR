@@ -4,7 +4,7 @@ suppressPackageStartupMessages({
   library(data.table)
 })
 
-base_dir <- Sys.getenv("METH_BASE_DIR", unset = getwd())
+base_dir <- path.expand(Sys.getenv("METH_BASE_DIR", "~/scratch/UQAC/meth"))
 outdir <- file.path(base_dir, "results", "11_mgcv")
 script11_dir <- file.path(base_dir, "scr", "11_mgcv")
 results12 <- file.path(base_dir, "scr", "12_cpg_DMR", "results")
@@ -16,7 +16,7 @@ m2_cpg_signals <- M2_manhattan[M2_manhattan$pval < 1e-5, ]
 
 dmrs <- fread(file.path(outdir, "24_dmrs_STRICT.tsv"))
 region_file <- fread(file.path(script11_dir, "dat", "region_file_1_chunk.csv"))
-if (!"region_id" %in% names(region_file)) region_file[, region_id := .I]
+region_file[, region_id := .I]
 dmrs <- merge(dmrs, region_file, by = "region_id", all.x = TRUE) %>%
   select(region_id, chr, region_start, region_end, pvals)
 

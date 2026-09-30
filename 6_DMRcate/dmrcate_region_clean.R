@@ -21,9 +21,9 @@ options(mc.cores = 1L)
 min_cpgs <- 10L
 min_cov <- 5
 n_jobs <- 300L
-base_dir <- Sys.getenv("METH_BASE_DIR", unset = getwd())
-script_dir <- file.path(base_dir, "11_mgcv")
-output_dir <- file.path(base_dir, "results", "13_dmrcate")
+PATH_wk <- path.expand(Sys.getenv("METH_BASE_DIR", "~/scratch/UQAC/meth"))
+PATH_scr11 <- file.path(PATH_wk, "scr", "11_mgcv")
+output_dir <- file.path(PATH_wk, "results", "13_dmrcate")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -31,8 +31,8 @@ if (length(args) == 0L) stop("Usage: Rscript dmrcate_region_clean.R <job_id>")
 job_id <- as.integer(args[1])
 if (is.na(job_id)) stop("job_id must be an integer.")
 
-region_file <- fread(file.path(script_dir, "dat", "region_file_1_chunk.csv"))
-if (!"region_id" %in% names(region_file)) region_file[, region_id := .I]
+region_file <- fread(file.path(PATH_scr11, "dat", "region_file_1_chunk.csv"))
+region_file[, region_id := .I]
 region_index_list <- split(
   seq_len(nrow(region_file)),
   cut(seq_len(nrow(region_file)), breaks = n_jobs, labels = FALSE)
@@ -41,7 +41,7 @@ if (job_id < 1L || job_id > length(region_index_list)) quit(save = "no", status 
 region_ids <- region_index_list[[job_id]]
 
 env <- new.env(parent = emptyenv())
-load(file.path(script_dir, "dat", "bsmooth_pheno_only.RData"), envir = env)
+load(file.path(PATH_scr11, "dat", "bsmooth_pheno_only.RData"), envir = env)
 if (!exists("pheno_file", envir = env, inherits = FALSE)) stop("pheno_file is missing.")
 pheno_file <- as.data.table(get("pheno_file", envir = env))
 rm(env)
@@ -118,7 +118,7 @@ dmr_rows <- list()
 for (chunk_name in names(chunks)) {
   chunk_regions <- as.data.table(chunks[[chunk_name]])
   chunk_id <- as.integer(chunk_name)
-  chunk_file <- file.path(base_dir, "data", "meth_split", sprintf("chunk_%04d.csv", chunk_id))
+  chunk_file <- file.path(PATH_wk, "data", "meth_split", sprintf("chunk_%04d.csv", chunk_id))
   if (!file.exists(chunk_file)) next
 
   header <- fread(chunk_file, nrows = 0L, showProgress = FALSE)
